@@ -1,6 +1,6 @@
 # Fuja do Coringa
 
-Jogo de cartas feito em Python com pygame-ce. O objetivo é fechar uma quadra (4 cartas iguais) **sem** estar com o coringa na mão.
+Jogo de cartas feito em Python com pygame-ce. O objetivo é ficar só com uma quadra na mão: 4 cartas iguais e mais nada.
 
 Ainda é um protótipo: por enquanto dá pra jogar só contra bots.
 
@@ -9,7 +9,8 @@ Ainda é um protótipo: por enquanto dá pra jogar só contra bots.
 - Mesa com 3 ou 4 jogadores. O baralho tem uma quadra por jogador (com 4 na mesa: A, K, Q e J) e mais 1 coringa.
 - Todo mundo começa com 4 cartas. Quem recebe o coringa fica com 5.
 - Na sua vez, você pega uma carta às cegas da mão do vizinho.
-- Ganha quem juntar 4 cartas iguais sem o coringa na mão.
+- Ganha quem ficar com exatamente 4 cartas na mão, todas iguais.
+- Juntou a quadra mas está com uma carta sobrando (qualquer uma, até o coringa)? Ainda não ganhou. Tem que esperar alguém pegar justamente essa carta da sua mão.
 - Pegou o coringa? Não dá pra jogar ele fora. Você só se livra dele quando alguém pega da sua mão.
 - Joga sempre quem está logo depois de quem tem 5 cartas.
 

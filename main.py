@@ -261,7 +261,7 @@ class Tela:
         self.texto(self.status(), self.f_texto, BRANCO, (640, 495))
         for i, linha in enumerate(jogo.mensagens(0)):
             self.texto(linha, self.f_pequeno, BRANCO, (15, ALTURA - 150 + i * 19), "topleft")
-        self.texto("Objetivo: 4 cartas iguais, sem o coringa na mão.   Esc: menu", self.f_pequeno, BRANCO,
+        self.texto("Objetivo: ficar só com 4 cartas iguais na mão.   Esc: menu", self.f_pequeno, BRANCO,
                    (LARGURA - 15, ALTURA - 15), "bottomright")
 
         if avisando:
@@ -269,7 +269,7 @@ class Tela:
             self.caixa(titulo, [descricao] + jogo.resumo_do_evento(0), "clique pra fechar")
         elif jogo.vencedor is not None:
             nome = "Você venceu!" if jogo.vencedor == 0 else f"{jogo.nomes[jogo.vencedor]} venceu!"
-            self.caixa(nome, ["Fechou a quadra sem o coringa na mão."], "clique pra jogar de novo · Esc volta ao menu")
+            self.caixa(nome, ["Ficou só com as 4 iguais na mão."], "clique pra jogar de novo · Esc volta ao menu")
 
     def status(self):
         jogo = self.jogo

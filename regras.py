@@ -47,10 +47,8 @@ CORINGA = Carta("CORINGA")
 
 
 def tem_quadra(mao):
-    """Ganha quem tem 4 iguais e não está com o coringa."""
-    if CORINGA in mao:
-        return False
-    return 4 in Counter(c.valor for c in mao).values()
+    """Ganha quem fica só com as 4 iguais na mão: sem coringa e sem carta sobrando."""
+    return len(mao) == 4 and len({c.valor for c in mao}) == 1
 
 
 class Jogo:

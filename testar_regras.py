@@ -39,7 +39,7 @@ def jogada(jogo):
         assert jogo.dono_do_coringa() == dono, "alguém pegou o coringa grudado"
 
 
-def ate_o_fim(jogo, limite=5000):
+def ate_o_fim(jogo, limite=20000):
     conferir(jogo)
     while jogo.vencedor is None:
         jogada(jogo)
