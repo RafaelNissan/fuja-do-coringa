@@ -12,8 +12,9 @@ from pathlib import Path
 import pygame
 
 import bots
-from regras import EVENTOS, VALORES, Carta, Jogo
+from regras import CORINGA, EVENTOS, VALORES, Carta, Jogo
 
+VOLUME_DA_MUSICA = 0.4  # de 0 a 1
 ESPERA_DO_BOT = 400     # milissegundos de pausa entre as jogadas dos bots
 TEMPO_DO_AVISO = 3000   # milissegundos que a explicação do evento fica na tela
 TEMPO_CHEGADA = 900     # carta do evento caindo e virando
@@ -21,6 +22,7 @@ TEMPO_IDA, TEMPO_AGARRAR, TEMPO_VOLTA = 300, 120, 300  # luva indo, fechando e v
 
 LARGURA, ALTURA = 1280, 720
 IMAGENS = Path(__file__).parent / "imagens"
+SONS = Path(__file__).parent / "sons"
 NOMES = ["Você", "Bot 1", "Bot 2", "Bot 3"]
 
 # Centro da mão de cada jogador. A ordem 0, 1, 2, 3 anda no sentido horário na tela,
@@ -107,12 +109,22 @@ class Tela:
         self.luva_aberta = pygame.image.load(IMAGENS / "luva_aberta.png").convert_alpha()
         self.luva_fechada = pygame.image.load(IMAGENS / "luva_fechada.png").convert_alpha()
         self.verso_evento = self.verso_de_evento()
+        self.mudo = False
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.load(str(SONS / "musica.ogg"))
+            pygame.mixer.music.set_volume(VOLUME_DA_MUSICA)
+            pygame.mixer.music.play(-1)  # -1 = loop infinito
+            self.som_coringa = pygame.mixer.Sound(str(SONS / "coringa.ogg"))
+        except pygame.error:
+            self.som_coringa = None  # PC sem saída de som: o jogo roda mudo
         self.jogo = None  # sem partida = está no menu
 
     def novo_jogo(self, jogadores):
         self.jogo = Jogo(NOMES[:jogadores])
         self.selecionada = None  # sua carta escolhida na volta de trocas
         self.pegada = None
+        self.tinha_coringa = CORINGA in self.jogo.maos[0]
         self.eventos_vistos = 0
         self.face_evento = None
         self.chegada_ate = 0
@@ -127,7 +139,9 @@ class Tela:
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     return
-                if self.jogo is None:
+                if e.type == pygame.KEYDOWN and e.key == pygame.K_m:
+                    self.alternar_som()
+                elif self.jogo is None:
                     if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                         escolha = self.escolha_do_menu(e.pos)
                         if escolha == "sair":
@@ -160,6 +174,20 @@ class Tela:
         self.jogar_bots(agora)
         if self.jogo.pedido != ("trocar", 0):
             self.selecionada = None
+        # o coringa chegou na sua mão, não importa como: pegando, trocando ou por evento
+        tem_coringa = CORINGA in self.jogo.maos[0]
+        if tem_coringa and not self.tinha_coringa and self.som_coringa and not self.mudo:
+            self.som_coringa.play()
+        self.tinha_coringa = tem_coringa
+
+    def alternar_som(self):
+        if self.som_coringa is None:
+            return
+        self.mudo = not self.mudo
+        if self.mudo:
+            pygame.mixer.music.pause()
+        else:
+            pygame.mixer.music.unpause()
 
     def jogar_bots(self, agora):
         if self.pegada or agora < max(self.bot_pode_jogar, self.aviso_ate):
@@ -248,6 +276,7 @@ class Tela:
             else:
                 pygame.draw.rect(self.tela, AMARELO if r.collidepoint(mouse) else BRANCO, r, border_radius=12)
                 self.texto(texto, self.f_texto, PRETO, r.center)
+        self.texto("M liga e desliga o som", self.f_pequeno, BRANCO, (640, ALTURA - 30))
 
     # ---------- posições ----------
 
@@ -328,7 +357,7 @@ class Tela:
         self.texto(self.status(), self.f_texto, BRANCO, (640, 495))
         for i, linha in enumerate(jogo.mensagens(0)):
             self.texto(linha, self.f_pequeno, BRANCO, (15, ALTURA - 150 + i * 19), "topleft")
-        self.texto("Objetivo: ficar só com 4 cartas iguais na mão.   Esc: menu", self.f_pequeno, BRANCO,
+        self.texto("Objetivo: ficar só com 4 cartas iguais na mão.   Esc: menu   M: som", self.f_pequeno, BRANCO,
                    (LARGURA - 15, ALTURA - 15), "bottomright")
 
         if p:

@@ -43,6 +43,8 @@ python -m venv .venv
 .venv\Scripts\python main.py
 ```
 
+No jogo, `Esc` volta pro menu e `M` liga e desliga o som.
+
 ## Testes
 
 O `testar_regras.py` simula 2 mil partidas só com bots e confere se alguma regra quebra: carta sumindo, mão desequilibrada, coringa grudado sendo pego, partida que nunca acaba. Não precisa do pygame.
@@ -60,6 +62,7 @@ python testar_regras.py
 | `main.py` | Menu, tela e cliques, usando pygame-ce. |
 | `testar_regras.py` | Simulação que testa as regras. |
 | `imagens/` | As luvas da animação, do [Cursor Pack do Kenney](https://kenney.nl/assets/cursor-pack) (licença CC0). |
+| `sons/` | A música "Stage 1", do [4 Chiptunes (Adventure)](https://opengameart.org/content/4-chiptunes-adventure) do Juhani Junkala, e o som do coringa, do [Digital Audio do Kenney](https://kenney.nl/assets/digital-audio). Os dois são CC0. |
 
 As regras ficam separadas da tela de propósito: quando vier o modo em rede, o jogador remoto entra pelo mesmo caminho que a tela usa hoje.
 
