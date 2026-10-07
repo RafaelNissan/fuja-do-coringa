@@ -59,6 +59,7 @@ python testar_regras.py
 | `bots.py` | Como os bots decidem as jogadas. |
 | `main.py` | Menu, tela e cliques, usando pygame-ce. |
 | `testar_regras.py` | Simulação que testa as regras. |
+| `imagens/` | As luvas da animação, do [Cursor Pack do Kenney](https://kenney.nl/assets/cursor-pack) (licença CC0). |
 
 As regras ficam separadas da tela de propósito: quando vier o modo em rede, o jogador remoto entra pelo mesmo caminho que a tela usa hoje.
 

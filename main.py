@@ -1,21 +1,26 @@
 """Tela do jogo: menu e partida contra os bots.
 
 Rode com: python main.py
-As regras ficam em regras.py e as decisões dos bots em bots.py; aqui é só desenho e clique.
+As regras ficam em regras.py e as decisões dos bots em bots.py; aqui é só desenho, animação e clique.
 """
 
 import math
+from dataclasses import dataclass
+from pathlib import Path
 
 # pyrefly: ignore [missing-import]
 import pygame
 
 import bots
-from regras import EVENTOS, VALORES, Jogo
+from regras import EVENTOS, VALORES, Carta, Jogo
 
-ESPERA_DO_BOT = 800     # milissegundos entre as jogadas dos bots
-TEMPO_DO_AVISO = 3000   # milissegundos que o aviso de evento fica na tela
+ESPERA_DO_BOT = 400     # milissegundos de pausa entre as jogadas dos bots
+TEMPO_DO_AVISO = 3000   # milissegundos que a explicação do evento fica na tela
+TEMPO_CHEGADA = 900     # carta do evento caindo e virando
+TEMPO_IDA, TEMPO_AGARRAR, TEMPO_VOLTA = 300, 120, 300  # luva indo, fechando e voltando com a carta
 
 LARGURA, ALTURA = 1280, 720
+IMAGENS = Path(__file__).parent / "imagens"
 NOMES = ["Você", "Bot 1", "Bot 2", "Bot 3"]
 
 # Centro da mão de cada jogador. A ordem 0, 1, 2, 3 anda no sentido horário na tela,
@@ -24,8 +29,9 @@ LUGARES = {
     3: [(640, 600), (330, 150), (950, 150)],
     4: [(640, 600), (190, 360), (640, 120), (1090, 360)],
 }
-CARTA_GRANDE = (90, 126)  # suas cartas
-CARTA_PEQUENA = (70, 98)  # cartas dos bots
+CARTA_GRANDE = (90, 126)   # suas cartas
+CARTA_PEQUENA = (70, 98)   # cartas dos bots
+CARTA_EVENTO = (150, 210)
 
 MESA = (24, 100, 64)
 MESA_CENTRO = (18, 84, 53)
@@ -37,6 +43,25 @@ ROXO = (115, 55, 175)
 AMARELO = (250, 205, 60)
 AZUL_CLARO = (110, 190, 255)
 VERSO = (45, 75, 165)
+
+
+@dataclass
+class Pegada:
+    """Luva no meio do caminho. A jogada só vale nas regras quando a animação termina."""
+    inicio: int
+    quem: int
+    alvo: int
+    indice: int
+    carta: Carta
+
+
+def suavizar(t):
+    """Começa rápido e freia no final."""
+    return 1 - (1 - t) ** 3
+
+
+def entre(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
 
 
 def ordem_na_mao(carta):
@@ -79,12 +104,18 @@ class Tela:
         self.f_pequeno = pygame.font.SysFont(fonte, 15)
         self.f_titulo = pygame.font.SysFont(fonte, 30, bold=True)
         self.f_capa = pygame.font.SysFont(fonte, 56, bold=True)
+        self.luva_aberta = pygame.image.load(IMAGENS / "luva_aberta.png").convert_alpha()
+        self.luva_fechada = pygame.image.load(IMAGENS / "luva_fechada.png").convert_alpha()
+        self.verso_evento = self.verso_de_evento()
         self.jogo = None  # sem partida = está no menu
 
     def novo_jogo(self, jogadores):
         self.jogo = Jogo(NOMES[:jogadores])
         self.selecionada = None  # sua carta escolhida na volta de trocas
+        self.pegada = None
         self.eventos_vistos = 0
+        self.face_evento = None
+        self.chegada_ate = 0
         self.aviso_ate = 0
         self.bot_pode_jogar = pygame.time.get_ticks() + ESPERA_DO_BOT
 
@@ -116,12 +147,70 @@ class Tela:
             self.relogio.tick(60)
 
     def atualizar(self, agora):
-        self.jogar_bots(agora)
+        p = self.pegada
+        if p and agora >= p.inicio + TEMPO_IDA + TEMPO_AGARRAR + TEMPO_VOLTA:
+            self.pegada = None
+            self.jogo.pegar(p.indice)
+            self.bot_pode_jogar = agora + ESPERA_DO_BOT
         if self.jogo.eventos_disparados != self.eventos_vistos:
             self.eventos_vistos = self.jogo.eventos_disparados
-            self.aviso_ate = agora + TEMPO_DO_AVISO
+            self.face_evento = self.carta_de_evento(self.jogo.ultimo_evento)
+            self.chegada_ate = agora + TEMPO_CHEGADA
+            self.aviso_ate = self.chegada_ate + TEMPO_DO_AVISO
+        self.jogar_bots(agora)
         if self.jogo.pedido != ("trocar", 0):
             self.selecionada = None
+
+    def jogar_bots(self, agora):
+        if self.pegada or agora < max(self.bot_pode_jogar, self.aviso_ate):
+            return
+        tipo, quem = self.jogo.pedido
+        if tipo == "passar":
+            pendentes = [j for j in quem if j != 0]
+            if not pendentes:
+                return
+            for j in pendentes:
+                self.jogo.passar(j, bots.carta_para_dar(self.jogo, j))
+            self.bot_pode_jogar = agora + ESPERA_DO_BOT
+        elif tipo == "pegar" and quem != 0:
+            self.comecar_pegada(bots.posicao_para_pegar(self.jogo, quem), agora)
+        elif tipo == "trocar" and quem != 0:
+            bots.jogar(self.jogo, quem)
+            self.bot_pode_jogar = agora + ESPERA_DO_BOT
+
+    def comecar_pegada(self, indice, agora):
+        jogo = self.jogo
+        alvo = jogo.de_quem_pega()
+        self.pegada = Pegada(agora, jogo.vez, alvo, indice, jogo.maos[alvo][indice])
+
+    def clicar(self, pos, agora):
+        if self.pegada:
+            return
+        if agora < self.chegada_ate:
+            self.chegada_ate = agora  # pula a animação e já mostra a explicação
+            return
+        if agora < self.aviso_ate:
+            self.aviso_ate = agora  # clique fecha a explicação do evento
+            return
+        if self.jogo.vencedor is not None:
+            self.novo_jogo(self.jogo.n)
+            return
+        for r, acao, dado in self.clicaveis():
+            if not r.collidepoint(pos):
+                continue
+            if acao == "selecionar":
+                self.selecionada = None if dado == self.selecionada else dado
+                return
+            if acao == "pegar":
+                self.comecar_pegada(dado, agora)
+                return
+            if acao == "trocar":
+                self.jogo.trocar(dado, self.selecionada)
+                self.selecionada = None
+            elif acao == "passar":
+                self.jogo.passar(0, dado)
+            self.bot_pode_jogar = agora + ESPERA_DO_BOT
+            return
 
     # ---------- menu ----------
 
@@ -160,45 +249,6 @@ class Tela:
                 pygame.draw.rect(self.tela, AMARELO if r.collidepoint(mouse) else BRANCO, r, border_radius=12)
                 self.texto(texto, self.f_texto, PRETO, r.center)
 
-    def jogar_bots(self, agora):
-        if agora < max(self.bot_pode_jogar, self.aviso_ate):
-            return
-        tipo, quem = self.jogo.pedido
-        if tipo == "passar":
-            pendentes = [j for j in quem if j != 0]
-            if not pendentes:
-                return
-            for j in pendentes:
-                self.jogo.passar(j, bots.carta_para_dar(self.jogo, j))
-        elif tipo in ("pegar", "trocar") and quem != 0:
-            bots.jogar(self.jogo, quem)
-        else:
-            return
-        self.bot_pode_jogar = agora + ESPERA_DO_BOT
-
-    def clicar(self, pos, agora):
-        if agora < self.aviso_ate:
-            self.aviso_ate = agora  # clique fecha o aviso do evento
-            return
-        if self.jogo.vencedor is not None:
-            self.novo_jogo(self.jogo.n)
-            return
-        for r, acao, dado in self.clicaveis():
-            if not r.collidepoint(pos):
-                continue
-            if acao == "selecionar":
-                self.selecionada = None if dado == self.selecionada else dado
-                return
-            if acao == "pegar":
-                self.jogo.pegar(dado)
-            elif acao == "trocar":
-                self.jogo.trocar(dado, self.selecionada)
-                self.selecionada = None
-            elif acao == "passar":
-                self.jogo.passar(0, dado)
-            self.bot_pode_jogar = agora + ESPERA_DO_BOT
-            return
-
     # ---------- posições ----------
 
     def retangulos(self, jogador):
@@ -215,8 +265,18 @@ class Tela:
         return [(r.move(0, -20) if c == self.selecionada else r, c)
                 for r, c in zip(self.retangulos(0), mao)]
 
+    def retangulo_da_carta(self, jogador, carta):
+        pares = self.minhas_cartas() if jogador == 0 else zip(self.retangulos(jogador), self.jogo.maos[jogador])
+        return next(r for r, c in pares if c == carta)
+
+    def ponto_de_partida(self, jogador):
+        """De onde a luva sai: a sua vem de baixo da tela, a dos bots sai da mão deles."""
+        return (640, ALTURA + 50) if jogador == 0 else LUGARES[self.jogo.n][jogador]
+
     def clicaveis(self):
         """Onde dá para clicar agora, do que está por cima para o que está por baixo."""
+        if self.pegada:
+            return []
         tipo, quem = self.jogo.pedido
         alvos = []
         if tipo == "pegar" and quem == 0:
@@ -237,12 +297,19 @@ class Tela:
         tela.fill(MESA)
         pygame.draw.ellipse(tela, MESA_CENTRO, (330, 185, 620, 280))
 
+        # a carta que a luva já agarrou sai da mão de onde estava
+        p = self.pegada
+        na_luva = p.carta if p and agora - p.inicio >= TEMPO_IDA else None
+
         aberta = jogo.efeito == "maos_abertas" or jogo.vencedor is not None
         for j in range(1, jogo.n):
             for r, c in zip(self.retangulos(j), jogo.maos[j]):
-                self.carta(r, c, aberta, pequena=True)
+                if c != na_luva:
+                    self.carta(r, c, aberta, pequena=True)
             self.nome(j)
         for r, c in self.minhas_cartas():
+            if c == na_luva:
+                continue
             self.carta(r, c, aberta=True)
             if c == jogo.ultima_recebida[0]:
                 pygame.draw.rect(tela, AZUL_CLARO, r.inflate(6, 6), 3, border_radius=10)
@@ -264,12 +331,70 @@ class Tela:
         self.texto("Objetivo: ficar só com 4 cartas iguais na mão.   Esc: menu", self.f_pequeno, BRANCO,
                    (LARGURA - 15, ALTURA - 15), "bottomright")
 
-        if avisando:
+        if p:
+            self.desenhar_pegada(agora)
+        if agora < self.chegada_ate:
+            self.desenhar_chegada(agora)
+        elif avisando:
             titulo, descricao = EVENTOS[jogo.ultimo_evento]
             self.caixa(titulo, [descricao] + jogo.resumo_do_evento(0), "clique pra fechar")
         elif jogo.vencedor is not None:
             nome = "Você venceu!" if jogo.vencedor == 0 else f"{jogo.nomes[jogo.vencedor]} venceu!"
             self.caixa(nome, ["Ficou só com as 4 iguais na mão."], "clique pra jogar de novo · Esc volta ao menu")
+
+    def desenhar_pegada(self, agora):
+        """A luva vai aberta até a carta, fecha e volta trazendo a carta."""
+        p = self.pegada
+        t = agora - p.inicio
+        casa = self.ponto_de_partida(p.quem)
+        alvo = self.retangulo_da_carta(p.alvo, p.carta).center
+        if t < TEMPO_IDA:
+            pos = entre(casa, alvo, suavizar(t / TEMPO_IDA))
+            luva = self.luva_aberta
+        else:
+            volta = min(1, max(0, t - TEMPO_IDA - TEMPO_AGARRAR) / TEMPO_VOLTA)
+            pos = entre(alvo, casa, suavizar(volta))
+            luva = self.luva_fechada
+            # você vê a sua carta indo embora; a dos outros só aparece em "mãos abertas"
+            visivel = p.alvo == 0 or self.jogo.efeito == "maos_abertas"
+            r = pygame.Rect((0, 0), CARTA_GRANDE if p.alvo == 0 else CARTA_PEQUENA)
+            r.center = pos
+            self.carta(r, p.carta, visivel, pequena=p.alvo != 0)
+        self.tela.blit(luva, luva.get_rect(center=(pos[0], pos[1] + 12)))
+
+    def desenhar_chegada(self, agora):
+        """A carta do evento cai do topo até o meio da mesa e vira."""
+        t = 1 - (self.chegada_ate - agora) / TEMPO_CHEGADA
+        largura, altura = CARTA_EVENTO
+        if t < 0.6:
+            imagem = self.verso_evento
+            y = -altura + (350 + altura) * suavizar(t / 0.6)
+        else:
+            k = (t - 0.6) / 0.4  # na metade a carta fica de lado e troca de face
+            imagem = self.verso_evento if k < 0.5 else self.face_evento
+            imagem = pygame.transform.smoothscale(imagem, (max(1, int(largura * abs(1 - 2 * k))), altura))
+            y = 350
+        self.tela.blit(imagem, imagem.get_rect(center=(640, y)))
+
+    def verso_de_evento(self):
+        imagem = pygame.Surface(CARTA_EVENTO, pygame.SRCALPHA)
+        r = imagem.get_rect()
+        pygame.draw.rect(imagem, ROXO, r, border_radius=12)
+        pygame.draw.rect(imagem, BRANCO, r.inflate(-16, -16), 3, border_radius=8)
+        interrogacao = self.f_capa.render("?", True, BRANCO)
+        imagem.blit(interrogacao, interrogacao.get_rect(center=r.center))
+        return imagem
+
+    def carta_de_evento(self, nome):
+        imagem = pygame.Surface(CARTA_EVENTO, pygame.SRCALPHA)
+        r = imagem.get_rect()
+        pygame.draw.rect(imagem, BRANCO, r, border_radius=12)
+        pygame.draw.rect(imagem, ROXO, r, 5, border_radius=12)
+        pygame.draw.polygon(imagem, ROXO, pontas_da_estrela((r.centerx, 62), 34))
+        for i, linha in enumerate(quebrar_linha(EVENTOS[nome][0], self.f_canto, r.w - 24)):
+            texto = self.f_canto.render(linha, True, ROXO)
+            imagem.blit(texto, texto.get_rect(center=(r.centerx, 130 + i * 24)))
+        return imagem
 
     def status(self):
         jogo = self.jogo
